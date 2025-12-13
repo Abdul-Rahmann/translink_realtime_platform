@@ -1,0 +1,69 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import (
+    col, from_json, to_timestamp, window, when, from_unixtime
+)
+from pyspark.sql.types import (
+    StructType, StructField, StringType, DoubleType, IntegerType, LongType
+)
+
+spark = (
+    SparkSession.builder
+    .appName('VehicleTelemetryStreaming')
+    .getOrCreate()
+)
+
+spark.sparkContext.setLogLevel('WARN')
+
+schema = StructType([
+    StructField("vehicle_id", StringType()),
+    StructField("route_id", StringType()),
+    StructField("timestamp", LongType()),
+    StructField("lat", DoubleType()),
+    StructField("lon", DoubleType()),
+    StructField("speed_kmh", IntegerType()),
+    StructField("delay_seconds", IntegerType()),
+    StructField("occupancy", IntegerType())
+])
+
+raw_df = (
+    spark.readStream
+    .format('kafka')
+    .option('kafka.bootstrap.servers', 'localhost:9092')
+    .option('subscribe', 'vehicle_telemetry')
+    .option('startingOffsets', 'latest')
+    .load()
+)
+
+parsed_df = (
+    raw_df
+    .selectExpr('CAST(value AS STRING) AS json_str')
+    .select(from_json(col('json_str'), schema).alias('data'))
+    .select('data.*')
+)
+
+enriched_df = (
+    parsed_df
+    .withColumn(
+    "event_time",
+    from_unixtime(col("timestamp")).cast("timestamp"))
+    .withColumn(
+        'delay_status',
+        when(col('delay_seconds') > 300, 'SEVERE')
+        .when(col('delay_seconds') > 60, 'MINOR')
+        .otherwise('ON_TIME')       
+    )
+)
+
+query = (
+    enriched_df
+    .writeStream
+    .format('console')
+    # .format('parquet')
+    .outputMode('append')
+    .option('path', 'data/output/vehicle_telemetry/')
+    .option('checkpointLocation', 'data/checkpoints/vehicle_telemetry/')
+    .trigger(processingTime='10 seconds')
+    .start()
+)
+
+query.awaitTermination()
