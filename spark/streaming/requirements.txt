@@ -1,0 +1,16 @@
+boto3==1.42.9
+botocore==1.42.9
+Faker==38.2.0
+h3==4.3.1
+jmespath==1.0.1
+kafka-python==2.3.0
+numpy==2.3.5
+pandas==2.3.3
+py4j==0.10.9.9
+pyspark==4.0.1
+python-dateutil==2.9.0.post0
+pytz==2025.2
+s3transfer==0.16.0
+six==1.17.0
+tzdata==2025.3
+urllib3==2.6.2
