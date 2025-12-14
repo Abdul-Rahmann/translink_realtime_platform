@@ -1,6 +1,7 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
-    col, from_json, to_timestamp, window, when, from_unixtime
+    col, from_json, to_timestamp, window, when, from_unixtime,
+    current_timestamp, date_format
 )
 from pyspark.sql.types import (
     StructType, StructField, StringType, DoubleType, IntegerType, LongType
@@ -9,6 +10,14 @@ from pyspark.sql.types import (
 spark = (
     SparkSession.builder
     .appName('VehicleTelemetryStreaming')
+    .config(
+        "spark.hadoop.fs.s3a.impl",
+        "org.apache.hadoop.fs.s3a.S3AFileSystem"
+    )
+    .config(
+        "spark.hadoop.fs.s3a.aws.credentials.provider",
+        "com.amazonaws.auth.DefaultAWSCredentialsProviderChain"
+    )
     .getOrCreate()
 )
 
@@ -54,15 +63,28 @@ enriched_df = (
     )
 )
 
-query = (
+final_df = (
     enriched_df
+    .withColumn("ingest_time", current_timestamp())
+    .withColumn("ingest_date", date_format("ingest_time", "yyyy-MM-dd"))
+    .withColumn("ingest_hour", date_format("ingest_time", "HH"))
+)
+
+query = (
+    final_df
     .writeStream
-    .format('console')
-    # .format('parquet')
-    .outputMode('append')
-    .option('path', 'data/output/vehicle_telemetry/')
-    .option('checkpointLocation', 'data/checkpoints/vehicle_telemetry/')
-    .trigger(processingTime='10 seconds')
+    .format("parquet")
+    .outputMode("append")
+    .partitionBy("ingest_date", "ingest_hour")
+    .option(
+        "path",
+        "s3a://translink-d/raw/vehicle_telemetry/"
+    )
+    .option(
+        "checkpointLocation",
+        "s3a://translink-d/checkpoints/vehicle_telemetry/"
+    )
+    .trigger(processingTime="10 seconds")
     .start()
 )
 
