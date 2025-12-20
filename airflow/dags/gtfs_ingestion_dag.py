@@ -1,5 +1,6 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
+from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
 from datetime import datetime
 import requests, zipfile, os, boto3
 from pathlib import Path
@@ -82,4 +83,20 @@ with DAG(
         python_callable=upload_to_s3
     )
 
-    download_task >> extract_task >> upload_task
+    spark_transform_task = SparkSubmitOperator(
+        task_id='spark_transform_gtfs',
+        application='/opt/spark-apps/batch/gtfs_transform.py',
+        name='gtfs_transform_job',
+        jars='/opt/spark-jars/hadoop-aws-3.3.4.jar,/opt/spark-jars/aws-java-sdk-bundle-1.12.262.jar',
+
+        verbose=True,
+        conf={
+            "spark.master": "local[*]",
+            "spark.hadoop.fs.s3a.aws.credentials.provider": "com.amazonaws.auth.DefaultAWSCredentialsProviderChain"
+        },
+        application_args=["--execution_date", "{{ ds }}"]
+    )
+    
+
+
+    download_task >> extract_task >> upload_task >> spark_transform_task

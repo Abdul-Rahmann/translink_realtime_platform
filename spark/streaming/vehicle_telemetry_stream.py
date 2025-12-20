@@ -74,6 +74,7 @@ query = (
     final_df
     .writeStream
     .format("parquet")
+    # .format("console")
     .outputMode("append")
     .partitionBy("ingest_date", "ingest_hour")
     .option(
@@ -82,7 +83,7 @@ query = (
     )
     .option(
         "checkpointLocation",
-        "s3a://translink-d/checkpoints/vehicle_telemetry/"
+        "s3a://translink-d/checkpoints/vehicle_telemetry_v5/"
     )
     .trigger(processingTime="10 seconds")
     .start()
